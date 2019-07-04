@@ -1,0 +1,6 @@
+project_id       = ""
+project          = ""
+bucket           = "cloud-build-notify-sample"
+cloudfunction    = "cloud-build-notify-sample"
+slack_token      = ""
+slack_channel_id = ""

@@ -1,0 +1,3 @@
+[submodule "terraform/cloudfunction/cloud-build-notify"]
+	path = terraform/cloudfunction/cloud-build-notify
+	url = https://github.com/3-shake/cloud-build-notify.git
