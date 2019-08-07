@@ -21,7 +21,7 @@ data "archive_file" "cloud_build_notify" {
 }
 
 resource "google_storage_bucket_object" "cloud_build_notify" {
-  name   = "cloud_build_notify/cloud-build-notify.zip"
+  name   = "cloud_build_notify/cloud-build-notify-${timestamp()}.zip"
   source = "${data.archive_file.cloud_build_notify.output_path}"
   bucket = google_storage_bucket.cloud_build_notify.name
 }

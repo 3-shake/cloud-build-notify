@@ -10,3 +10,6 @@ terraform.apply:
 
 terraform.destroy:
 	@cd ./terraform && terraform destroy .
+
+submodule.update:
+	@git submodule foreach git pull origin master
