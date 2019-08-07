@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 
@@ -34,6 +35,7 @@ func init() {
 }
 
 type Slack struct {
+	ProjectID string
 	Token     string
 	ChannelID string
 }
@@ -78,6 +80,7 @@ func NewCloudBuild(m *pubsub.PubsubMessage) (*cloudbuild.Build, error) {
 }
 
 func NewSlack() (*Slack, error) {
+	project := os.Getenv("GCP_PROJECT")
 	token := os.Getenv("SLACK_TOKEN")
 	if token == "" {
 		return nil, errors.New("Required SLACK_TOKEN")
@@ -89,6 +92,7 @@ func NewSlack() (*Slack, error) {
 	}
 
 	return &Slack{
+		ProjectID: project,
 		Token:     token,
 		ChannelID: channelID,
 	}, nil
@@ -100,7 +104,8 @@ func (sl *Slack) Notify(msg string) error {
 		Pretext: msg,
 	}
 
-	_, _, err := cli.PostMessage(sl.ChannelID, slack.MsgOptionText("[Deploy Status]", false), slack.MsgOptionAttachments(attachment))
+	optionTxt := fmt.Sprintf("(%v) Deploy Status", sl.ProjectID)
+	_, _, err := cli.PostMessage(sl.ChannelID, slack.MsgOptionText(optionTxt, false), slack.MsgOptionAttachments(attachment))
 	if err != nil {
 		return err
 	}
