@@ -26,7 +26,7 @@ var (
 		"WORKING":        true,
 		"SUCCESS":        true,
 		"FAILURE":        true,
-		"INTERNAL_ERROR": false,
+		"INTERNAL_ERROR": true,
 		"TIMEOUT":        true,
 		"CANCELLED":      true,
 	}
