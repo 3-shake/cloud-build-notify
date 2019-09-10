@@ -1,10 +1,9 @@
-package notify
+package p
 
 import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -15,48 +14,59 @@ import (
 )
 
 var (
-	cloudBuildStatus = map[string]bool{
+	slackURL   string
+	channel    string
+	branchName string
+	repoName   string
+
+	// いらないステータスをfalseにしあとでスキップする
+	useStatus = map[string]bool{
 		"STATUS_UNKNOWN": false,
 		"QUEUED":         false,
-		"WORKING":        false,
+		"WORKING":        true,
 		"SUCCESS":        true,
 		"FAILURE":        true,
-		"INTERNAL_ERROR": true,
+		"INTERNAL_ERROR": false,
 		"TIMEOUT":        true,
-		"CANCELLED":      false,
+		"CANCELLED":      true,
+	}
+	colors = map[string]string{
+		"GOOD":    "good",
+		"WARNING": "warning",
+		"DANGER":  "danger",
+		"BLUE":    "#439FE0",
 	}
 )
 
 func init() {
-	_, err := NewSlack()
-	if err != nil {
-		log.Fatal(err)
-	}
+	slackURL = os.Getenv("SLACK_URL")
+	channel = os.Getenv("CHANNEL")
+	repoName = os.Getenv("REPO_NAME")
+	branchName = os.Getenv("BRANCH_NAME")
 }
 
-type Slack struct {
-	ProjectID string
-	Token     string
-	ChannelID string
-}
-
-func NotifyCloudBuild(ctx context.Context, m *pubsub.PubsubMessage) error {
-	build, err := NewCloudBuild(m)
+// NotifyGCB2Slack consumes a Pub/Sub message.
+func NotifyGCB2Slack(ctx context.Context, m *pubsub.PubsubMessage) error {
+	build, err := newCloudBuild(m)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	if !cloudBuildStatus[build.Status] {
+
+	// どうでもいいrepositoryとbranchにfileterをかける
+	if build.Source.RepoSource.RepoName != repoName || build.Source.RepoSource.BranchName != branchName {
 		return nil
 	}
 
-	cli, err := NewSlack()
-	if err != nil {
-		log.Println(err)
-		return err
+	// どうでも良いステータスは無視する
+	if onStatus, ok := useStatus[build.Status]; !ok || !onStatus {
+		log.Printf("%s status is skipped\n", build.Status)
+		return nil
 	}
 
-	err = cli.Notify(build.Status)
+	msg := newWebhookMessage(build)
+
+	err = slack.PostWebhook(slackURL, msg)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -65,49 +75,51 @@ func NotifyCloudBuild(ctx context.Context, m *pubsub.PubsubMessage) error {
 	return nil
 }
 
-func NewCloudBuild(m *pubsub.PubsubMessage) (*cloudbuild.Build, error) {
-	decoded, err := base64.StdEncoding.DecodeString(m.Data)
-	if err != nil {
-		return nil, err
-	}
-	build := &cloudbuild.Build{}
-	err = json.Unmarshal(decoded, build)
-	if err != nil {
-		return nil, err
-	}
+func newWebhookMessage(build *cloudbuild.Build) *slack.WebhookMessage {
+	var msg slack.WebhookMessage
+	attachment1 := slack.Attachment{}
+	attachment1.Title = "Build Status: " + build.Status
+	attachment1.TitleLink = build.LogUrl
+	attachment1.Text = fmt.Sprintf(
+		"project_id: *%s*\nrepository: *%s*\nbranch: *%s*",
+		build.ProjectId,
+		build.Source.RepoSource.RepoName,
+		build.Source.RepoSource.BranchName,
+	)
 
-	return build, nil
+	switch build.Status {
+	case "WORKING":
+		attachment1.Color = colors["BLUE"]
+
+	case "SUCCESS":
+		attachment1.Color = colors["GOOD"]
+
+	case "FAILURE", "TIMEOUT", "CANCELLED":
+		attachment1.Color = colors["DANGER"]
+
+	default:
+		attachment1.Color = colors["WARNING"]
+
+	}
+	msg = slack.WebhookMessage{
+		Attachments: []slack.Attachment{attachment1},
+		Channel:     "#" + channel,
+	}
+	return &msg
 }
 
-func NewSlack() (*Slack, error) {
-	project := os.Getenv("GCP_PROJECT")
-	token := os.Getenv("SLACK_TOKEN")
-	if token == "" {
-		return nil, errors.New("Required SLACK_TOKEN")
-	}
-
-	channelID := os.Getenv("SLACK_CHANNEL_ID")
-	if channelID == "" {
-		return nil, errors.New("Required SLACK_CHANNEL_ID")
-	}
-
-	return &Slack{
-		ProjectID: project,
-		Token:     token,
-		ChannelID: channelID,
-	}, nil
-}
-
-func (sl *Slack) Notify(msg string) error {
-	cli := slack.New(sl.Token)
-	attachment := slack.Attachment{
-		Pretext: msg,
-	}
-
-	optionTxt := fmt.Sprintf("(%v) Deploy Status", sl.ProjectID)
-	_, _, err := cli.PostMessage(sl.ChannelID, slack.MsgOptionText(optionTxt, false), slack.MsgOptionAttachments(attachment))
+func newCloudBuild(m *pubsub.PubsubMessage) (*cloudbuild.Build, error) {
+	d, err := base64.StdEncoding.DecodeString(m.Data)
 	if err != nil {
-		return err
+		log.Fatalln(err)
+		return nil, err
 	}
-	return nil
+
+	build := cloudbuild.Build{}
+	err = json.Unmarshal(d, &build)
+	if err != nil {
+		log.Fatalln(err)
+		return nil, err
+	}
+	return &build, nil
 }
