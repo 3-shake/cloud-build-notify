@@ -27,10 +27,18 @@ variable "region" {
   default = "asia-east1"
 }
 
-variable "slack_token" {
+variable "slack_url" {
   default = ""
 }
 
-variable "slack_channel_id" {
+variable "channel" {
   default = ""
+}
+
+variable "repo_name" {
+  default = "asia-east1"
+}
+
+variable "branch_name" {
+  default = "asia-east1"
 }

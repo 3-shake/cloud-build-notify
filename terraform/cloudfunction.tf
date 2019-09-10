@@ -17,7 +17,9 @@ resource "google_cloudfunctions_function" "cloud_build_notify" {
   }
 
   environment_variables = {
-    SLACK_TOKEN      = var.slack_token
-    SLACK_CHANNEL_ID = var.slack_channel_id
+    SLACK_URL    = var.slack_url
+    CHANNEL      = var.channel 
+    REPO_NAME    = var.repo_name 
+    BRANCH_NAME  = var.branch_name
   }
 }
